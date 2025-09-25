@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"testing"
 	"time"
 )
@@ -17,8 +18,8 @@ var (
 )
 
 func startMDNS(ctx context.Context, port int, name, service, domain string) {
-	// 5353 is default mdns port
-	server, err := Register(name, service, domain, port, []string{"txtv=0", "lo=1", "la=2"}, nil)
+	server, err := Register(name, service, domain, port,
+		[]string{"txtv=0", "lo=1", "la=2"}, nil)
 	if err != nil {
 		panic(fmt.Errorf("%v %v", err, "while registering mdns service"))
 	}
@@ -26,9 +27,7 @@ func startMDNS(ctx context.Context, port int, name, service, domain string) {
 	log.Printf("Published service: %s, type: %s, domain: %s", name, service, domain)
 
 	<-ctx.Done()
-
 	log.Printf("Shutting down.")
-
 }
 
 func TestBasic(t *testing.T) {
@@ -36,23 +35,36 @@ func TestBasic(t *testing.T) {
 	defer cancel()
 
 	go startMDNS(ctx, mdnsPort, mdnsName, mdnsService, mdnsDomain)
-
 	time.Sleep(time.Second)
 
-	resolver, err := NewResolver(nil)
+	resolver, err := NewResolver()
 	if err != nil {
 		t.Fatalf("Expected create resolver success, but got %v", err)
 	}
-	entries := make(chan *ServiceEntry, 100)
-	if err := resolver.Browse(ctx, mdnsService, mdnsDomain, entries); err != nil {
+
+	var (
+		mu      sync.Mutex
+		results []*ServiceEntry
+	)
+
+	err = resolver.Browse(ctx, mdnsService, mdnsDomain, func(e *ServiceEntry) {
+		mu.Lock()
+		results = append(results, e)
+		mu.Unlock()
+	})
+	if err != nil {
 		t.Fatalf("Expected browse success, but got %v", err)
 	}
+
 	<-ctx.Done()
 
-	if len(entries) != 1 {
-		t.Fatalf("Expected number of service entries is 1, but got %d", len(entries))
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(results) != 1 {
+		t.Fatalf("Expected number of service entries is 1, but got %d", len(results))
 	}
-	result := <-entries
+	result := results[0]
 	if result.Domain != mdnsDomain {
 		t.Fatalf("Expected domain is %s, but got %s", mdnsDomain, result.Domain)
 	}
@@ -68,26 +80,27 @@ func TestBasic(t *testing.T) {
 }
 
 func TestNoRegister(t *testing.T) {
-	resolver, err := NewResolver(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	resolver, err := NewResolver()
 	if err != nil {
 		t.Fatalf("Expected create resolver success, but got %v", err)
 	}
 
-	// before register, mdns resolve shuold not have any entry
-	entries := make(chan *ServiceEntry)
-	go func(results <-chan *ServiceEntry) {
-		s := <-results
-		if s != nil {
-			t.Errorf("Expected empty service entries but got %v", *s)
-		}
-	}(entries)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := resolver.Browse(ctx, mdnsService, mdnsDomain, entries); err != nil {
+	var gotEntries bool
+	err = resolver.Browse(ctx, mdnsService, mdnsDomain, func(e *ServiceEntry) {
+		gotEntries = true
+	})
+	if err != nil {
 		t.Fatalf("Expected browse success, but got %v", err)
 	}
+
 	<-ctx.Done()
-	cancel()
+
+	if gotEntries {
+		t.Errorf("Expected no service entries, but got some")
+	}
 }
 
 func TestSubtype(t *testing.T) {
@@ -96,34 +109,34 @@ func TestSubtype(t *testing.T) {
 		defer cancel()
 
 		go startMDNS(ctx, mdnsPort, mdnsName, mdnsSubtype, mdnsDomain)
-
 		time.Sleep(time.Second)
 
-		resolver, err := NewResolver(nil)
+		resolver, err := NewResolver()
 		if err != nil {
 			t.Fatalf("Expected create resolver success, but got %v", err)
 		}
-		entries := make(chan *ServiceEntry, 100)
-		if err := resolver.Browse(ctx, mdnsSubtype, mdnsDomain, entries); err != nil {
+
+		var (
+			mu      sync.Mutex
+			results []*ServiceEntry
+		)
+
+		err = resolver.Browse(ctx, mdnsSubtype, mdnsDomain, func(e *ServiceEntry) {
+			mu.Lock()
+			results = append(results, e)
+			mu.Unlock()
+		})
+		if err != nil {
 			t.Fatalf("Expected browse success, but got %v", err)
 		}
+
 		<-ctx.Done()
 
-		if len(entries) != 1 {
-			t.Fatalf("Expected number of service entries is 1, but got %d", len(entries))
-		}
-		result := <-entries
-		if result.Domain != mdnsDomain {
-			t.Fatalf("Expected domain is %s, but got %s", mdnsDomain, result.Domain)
-		}
-		if result.Service != mdnsService {
-			t.Fatalf("Expected service is %s, but got %s", mdnsService, result.Service)
-		}
-		if result.Instance != mdnsName {
-			t.Fatalf("Expected instance is %s, but got %s", mdnsName, result.Instance)
-		}
-		if result.Port != mdnsPort {
-			t.Fatalf("Expected port is %d, but got %d", mdnsPort, result.Port)
+		mu.Lock()
+		defer mu.Unlock()
+
+		if len(results) != 1 {
+			t.Fatalf("Expected number of service entries is 1, but got %d", len(results))
 		}
 	})
 
@@ -132,34 +145,34 @@ func TestSubtype(t *testing.T) {
 		defer cancel()
 
 		go startMDNS(ctx, mdnsPort, mdnsName, mdnsSubtype, mdnsDomain)
-
 		time.Sleep(time.Second)
 
-		resolver, err := NewResolver(nil)
+		resolver, err := NewResolver()
 		if err != nil {
 			t.Fatalf("Expected create resolver success, but got %v", err)
 		}
-		entries := make(chan *ServiceEntry, 100)
-		if err := resolver.Browse(ctx, mdnsService, mdnsDomain, entries); err != nil {
+
+		var (
+			mu      sync.Mutex
+			results []*ServiceEntry
+		)
+
+		err = resolver.Browse(ctx, mdnsService, mdnsDomain, func(e *ServiceEntry) {
+			mu.Lock()
+			results = append(results, e)
+			mu.Unlock()
+		})
+		if err != nil {
 			t.Fatalf("Expected browse success, but got %v", err)
 		}
+
 		<-ctx.Done()
 
-		if len(entries) != 1 {
-			t.Fatalf("Expected number of service entries is 1, but got %d", len(entries))
-		}
-		result := <-entries
-		if result.Domain != mdnsDomain {
-			t.Fatalf("Expected domain is %s, but got %s", mdnsDomain, result.Domain)
-		}
-		if result.Service != mdnsService {
-			t.Fatalf("Expected service is %s, but got %s", mdnsService, result.Service)
-		}
-		if result.Instance != mdnsName {
-			t.Fatalf("Expected instance is %s, but got %s", mdnsName, result.Instance)
-		}
-		if result.Port != mdnsPort {
-			t.Fatalf("Expected port is %d, but got %d", mdnsPort, result.Port)
+		mu.Lock()
+		defer mu.Unlock()
+
+		if len(results) != 1 {
+			t.Fatalf("Expected number of service entries is 1, but got %d", len(results))
 		}
 	})
 }

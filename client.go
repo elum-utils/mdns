@@ -81,12 +81,12 @@ func NewResolver(options ...ClientOption) (*Resolver, error) {
 }
 
 // Browse for all services of a given type in a given domain.
-func (r *Resolver) Browse(ctx context.Context, service, domain string, entries chan<- *ServiceEntry) error {
-	params := defaultParams(service)
+func (r *Resolver) Browse(ctx context.Context, service, domain string, handler ServiceHandler) error {
+	params := defaultParams(service, handler)
 	if domain != "" {
 		params.Domain = domain
 	}
-	params.Entries = entries
+	params.handler = handler
 	params.isBrowsing = true
 	ctx, cancel := context.WithCancel(ctx)
 	go r.c.mainloop(ctx, params)
@@ -108,13 +108,13 @@ func (r *Resolver) Browse(ctx context.Context, service, domain string, entries c
 }
 
 // Lookup a specific service by its name and type in a given domain.
-func (r *Resolver) Lookup(ctx context.Context, instance, service, domain string, entries chan<- *ServiceEntry) error {
-	params := defaultParams(service)
+func (r *Resolver) Lookup(ctx context.Context, instance, service, domain string, handler ServiceHandler) error {
+	params := defaultParams(service, handler)
 	params.Instance = instance
 	if domain != "" {
 		params.Domain = domain
 	}
-	params.Entries = entries
+	params.handler = handler
 	ctx, cancel := context.WithCancel(ctx)
 	go r.c.mainloop(ctx, params)
 	err := r.c.query(params)
@@ -135,8 +135,8 @@ func (r *Resolver) Lookup(ctx context.Context, instance, service, domain string,
 }
 
 // defaultParams returns a default set of QueryParams.
-func defaultParams(service string) *lookupParams {
-	return newLookupParams("", service, "local", false, make(chan *ServiceEntry))
+func defaultParams(service string, handler ServiceHandler) *lookupParams {
+	return newLookupParams("", service, "local", false, handler)
 }
 
 // Client structure encapsulates both IPv4/IPv6 UDP connections.
@@ -195,8 +195,6 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 	for {
 		select {
 		case <-ctx.Done():
-			// Context expired. Notify subscriber that we are done here.
-			params.done()
 			c.shutdown()
 			return
 		case msg := <-msgCh:
@@ -293,7 +291,10 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 				// Submit entry to subscriber and cache it.
 				// This is also a point to possibly stop probing actively for a
 				// service entry.
-				params.Entries <- e
+				if params.handler != nil {
+					params.handler(e)
+				}
+
 				sentEntries[k] = e
 				if !params.isBrowsing {
 					params.disableProbing()

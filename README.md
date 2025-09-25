@@ -26,43 +26,37 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/elum-utils/mdns"
 )
 
 var (
-	name     = flag.String("name", "GoService", "Service instance name")
-	service  = flag.String("service", "_workstation._tcp", "Service type")
-	domain   = flag.String("domain", "local.", "Network domain")
-	port     = flag.Int("port", 42424, "Service port")
-	waitTime = flag.Int("wait", 10, "Time in seconds to keep service alive")
+	name     = flag.String("name", "GMELUM MDNS", "The name for the service.")
+	service  = flag.String("service", "_workstation._tcp", "Set the service type of the new service.")
+	domain   = flag.String("domain", "local.", "Set the network domain. Default should be fine.")
+	port     = flag.Int("port", 42424, "Set the port the service is listening to.")
 )
 
 func main() {
 	flag.Parse()
 
-	server, err := mdns.Register(*name, *service, *domain, *port,
-		[]string{"txtv=1", "lo=1"}, nil)
+	server, err := mdns.Register(*name, *service, *domain, *port, []string{"txtv=0", "lo=1", "la=2"}, nil)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	defer server.Shutdown()
+	log.Println("Published service:")
+	log.Println("- Name:", *name)
+	log.Println("- Type:", *service)
+	log.Println("- Domain:", *domain)
+	log.Println("- Port:", *port)
 
-	log.Printf("Published service %s on port %d\n", *name, *port)
-
+	// Clean exit.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	var tc <-chan time.Time
-	if *waitTime > 0 {
-		tc = time.After(time.Duration(*waitTime) * time.Second)
-	}
+	<-sig
 
-	select {
-	case <-sig:
-	case <-tc:
-	}
 	log.Println("Shutting down.")
 }
 ```
@@ -134,15 +128,13 @@ import (
 	"context"
 	"flag"
 	"log"
-	"time"
 
 	"github.com/elum-utils/mdns"
 )
 
 var (
-	service  = flag.String("service", "_workstation._tcp", "Service type to discover")
-	domain   = flag.String("domain", "local.", "Search domain")
-	waitTime = flag.Int("wait", 10, "Discovery duration in seconds")
+	service = flag.String("service", "_workstation._tcp", "Service type")
+	domain  = flag.String("domain", "local.", "Search domain")
 )
 
 func main() {
@@ -153,24 +145,14 @@ func main() {
 		log.Fatal("Failed to initialize resolver:", err)
 	}
 
-	entries := make(chan *mdns.ServiceEntry)
-	go func(results <-chan *mdns.ServiceEntry) {
-		for entry := range results {
-			log.Printf("Discovered: %s (%s:%d)", entry.Instance, entry.AddrIPv4, entry.Port)
-		}
-		log.Println("Discovery finished.")
-	}(entries)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*waitTime)*time.Second)
-	defer cancel()
-
-	err = resolver.Browse(ctx, *service, *domain, entries)
+	err = resolver.Browse(context.Background(), *service, *domain, func(se *mdns.ServiceEntry) {
+		log.Printf("Found service %s at %s:%d", se.Instance, se.AddrIPv4, se.Port)
+	})
 	if err != nil {
-		log.Fatal("Failed to browse:", err)
+		log.Fatal("Failed to lookup:", err)
 	}
 
-	<-ctx.Done()
-	time.Sleep(1 * time.Second)
+	select {}
 }
 ```
 
@@ -185,43 +167,33 @@ import (
 	"context"
 	"flag"
 	"log"
-	"time"
 
 	"github.com/elum-utils/mdns"
 )
 
 var (
-	name     = flag.String("name", "GoService", "Service instance name to lookup")
-	service  = flag.String("service", "_workstation._tcp", "Service type")
-	domain   = flag.String("domain", "local.", "Search domain")
-	waitTime = flag.Int("wait", 5, "Lookup timeout in seconds")
+	name    = flag.String("name", "GoService", "Service instance name to lookup")
+	service = flag.String("service", "_workstation._tcp", "Service type")
+	domain  = flag.String("domain", "local.", "Search domain")
 )
 
 func main() {
-	flag.Parse()
+	flag.Parse() 
 
 	resolver, err := mdns.NewResolver()
 	if err != nil {
 		log.Fatal("Failed to initialize resolver:", err)
 	}
 
-	entries := make(chan *mdns.ServiceEntry, 1)
-	go func(results <-chan *mdns.ServiceEntry) {
-		for entry := range results {
-			log.Printf("Found service %s at %s:%d", entry.Instance, entry.AddrIPv4, entry.Port)
-		}
-	}(entries)
+	err = resolver.Lookup(context.Background(), *name, *service, *domain, func(se *mdns.ServiceEntry) {
+		log.Printf("Found service %s at %s:%d", se.Instance, se.AddrIPv4, se.Port)
+	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*waitTime)*time.Second)
-	defer cancel()
-
-	err = resolver.Lookup(ctx, *name, *service, *domain, entries)
 	if err != nil {
 		log.Fatal("Failed to lookup:", err)
 	}
 
-	<-ctx.Done()
+	select {}
 }
 ```
-
 ---

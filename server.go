@@ -298,13 +298,16 @@ func (s *Server) parsePacket(packet []byte, ifIndex int, from net.Addr) error {
 // handleQuery is used to handle an incoming query
 func (s *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) error {
 	// Ignore questions with authoritative section for now
-	if len(query.Ns) > 0 {
-		return nil
-	}
+	// if len(query.Ns) > 0 {
+	// 	return nil
+	// }
+
+	// debugLog("Query received: %+v", query.Question)
 
 	// Handle each question
 	var err error
 	for _, q := range query.Question {
+
 		resp := dns.Msg{}
 		resp.SetReply(query)
 		resp.Compress = true

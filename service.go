@@ -6,27 +6,28 @@ import (
 	"sync"
 )
 
-// ServiceRecord contains the basic description of a service, which contains instance name, service type & domain
+// ServiceHandler is a callback function that will be called for each discovered service.
+type ServiceHandler func(*ServiceEntry)
+
+// ServiceRecord contains the basic description of a service.
 type ServiceRecord struct {
 	Instance string   `json:"name"`     // Instance name (e.g. "My web page")
 	Service  string   `json:"type"`     // Service name (e.g. _http._tcp.)
 	Subtypes []string `json:"subtypes"` // Service subtypes
 	Domain   string   `json:"domain"`   // If blank, assumes "local"
 
-	// private variable populated on ServiceRecord creation
+	// cached strings
 	serviceName         string
 	serviceInstanceName string
 	serviceTypeName     string
 }
 
-// ServiceName returns a complete service name (e.g. _foobar._tcp.local.), which is composed
-// of a service name (also referred as service type) and a domain.
+// ServiceName returns a complete service name (e.g. _foobar._tcp.local.)
 func (s *ServiceRecord) ServiceName() string {
 	return s.serviceName
 }
 
-// ServiceInstanceName returns a complete service instance name (e.g. MyDemo\ Service._foobar._tcp.local.),
-// which is composed from service instance name, service name and a domain.
+// ServiceInstanceName returns a complete service instance name
 func (s *ServiceRecord) ServiceInstanceName() string {
 	return s.serviceInstanceName
 }
@@ -68,7 +69,9 @@ func NewServiceRecord(instance, service string, domain string) *ServiceRecord {
 // lookupParams contains configurable properties to create a service discovery request
 type lookupParams struct {
 	ServiceRecord
-	Entries chan<- *ServiceEntry // Entries Channel
+
+	// handler callback to call on each discovered entry
+	handler ServiceHandler
 
 	isBrowsing  bool
 	stopProbing chan struct{}
@@ -76,10 +79,10 @@ type lookupParams struct {
 }
 
 // newLookupParams constructs a lookupParams.
-func newLookupParams(instance, service, domain string, isBrowsing bool, entries chan<- *ServiceEntry) *lookupParams {
+func newLookupParams(instance, service, domain string, isBrowsing bool, handler ServiceHandler) *lookupParams {
 	p := &lookupParams{
 		ServiceRecord: *NewServiceRecord(instance, service, domain),
-		Entries:       entries,
+		handler:       handler,
 		isBrowsing:    isBrowsing,
 	}
 	if !isBrowsing {
@@ -88,27 +91,19 @@ func newLookupParams(instance, service, domain string, isBrowsing bool, entries 
 	return p
 }
 
-// Notify subscriber that no more entries will arrive. Mostly caused
-// by an expired context.
-func (l *lookupParams) done() {
-	close(l.Entries)
-}
-
 func (l *lookupParams) disableProbing() {
 	l.once.Do(func() { close(l.stopProbing) })
 }
 
 // ServiceEntry represents a browse/lookup result for client API.
-// It is also used to configure service registration (server API), which is
-// used to answer multicast queries.
 type ServiceEntry struct {
 	ServiceRecord
 	HostName string   `json:"hostname"` // Host machine DNS name
 	Port     int      `json:"port"`     // Service Port
-	Text     []string `json:"text"`     // Service info served as a TXT record
+	Text     []string `json:"text"`     // TXT records
 	TTL      uint32   `json:"ttl"`      // TTL of the service record
-	AddrIPv4 []net.IP `json:"-"`        // Host machine IPv4 address
-	AddrIPv6 []net.IP `json:"-"`        // Host machine IPv6 address
+	AddrIPv4 []net.IP `json:"-"`        // IPv4 addresses
+	AddrIPv6 []net.IP `json:"-"`        // IPv6 addresses
 }
 
 // NewServiceEntry constructs a ServiceEntry.
