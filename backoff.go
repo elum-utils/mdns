@@ -54,7 +54,7 @@ type Backoff struct {
 // interval. Zero values may be used to use the default values.
 //
 // Panics if either max or interval is negative.
-func New(max time.Duration, interval time.Duration) *Backoff {
+func NewBackoff(max time.Duration, interval time.Duration) *Backoff {
 	if max < 0 || interval < 0 {
 		panic("backoff: max or interval is negative")
 	}
@@ -70,7 +70,7 @@ func New(max time.Duration, interval time.Duration) *Backoff {
 // NewWithoutJitter works similarly to New, except that the created
 // Backoff will not use jitter.
 func NewWithoutJitter(max time.Duration, interval time.Duration) *Backoff {
-	b := New(max, interval)
+	b := NewBackoff(max, interval)
 	b.noJitter = true
 	return b
 }

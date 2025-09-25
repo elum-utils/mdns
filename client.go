@@ -371,7 +371,7 @@ func (c *client) recv(ctx context.Context, l interface{}, msgCh chan *dns.Msg) {
 // go routine context.
 func (c *client) periodicQuery(ctx context.Context, params *lookupParams) error {
 	// создаём свой backoff с параметрами
-	bo := New(60*time.Second, 4*time.Second) // max=60s, interval=4s
+	bo := NewBackoff(60*time.Second, 4*time.Second) // max=60s, interval=4s
 	bo.SetDecay(10 * time.Second)
 
 	var timer *time.Timer
