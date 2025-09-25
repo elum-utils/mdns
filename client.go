@@ -372,7 +372,7 @@ func (c *client) recv(ctx context.Context, l interface{}, msgCh chan *dns.Msg) {
 func (c *client) periodicQuery(ctx context.Context, params *lookupParams) error {
 	// создаём свой backoff с параметрами
 	bo := New(60*time.Second, 4*time.Second) // max=60s, interval=4s
-	bo.SetDecay(10 * time.Second)            // сброс при долгом простое
+	bo.SetDecay(10 * time.Second)
 
 	var timer *time.Timer
 	defer func() {
@@ -392,9 +392,7 @@ func (c *client) periodicQuery(ctx context.Context, params *lookupParams) error 
 
 		select {
 		case <-timer.C:
-			// Следующая попытка
 		case <-params.stopProbing:
-			// Успешный ответ получен → прекращаем
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
