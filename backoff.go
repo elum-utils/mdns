@@ -1,4 +1,3 @@
-
 package mdns
 
 import (

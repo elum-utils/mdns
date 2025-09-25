@@ -12,7 +12,6 @@ import (
 	"github.com/miekg/dns"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
-
 )
 
 // IPType specifies the IP traffic the client listens for.
