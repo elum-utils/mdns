@@ -88,7 +88,6 @@ func TestReset(t *testing.T) {
 
 const decay = 5 * time.Millisecond
 const max = 10 * time.Millisecond
-const interval = time.Millisecond
 
 func TestDecay(t *testing.T) {
 	const iter = 10
