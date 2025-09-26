@@ -4,7 +4,6 @@ import (
 	"strings"
 )
 
-
 func parseSubtypes(service string) (string, []string) {
 	subtypes := strings.Split(service, ",")
 	return subtypes[0], subtypes[1:]
