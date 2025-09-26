@@ -15,7 +15,7 @@ var (
 )
 
 func main() {
-	flag.Parse() 
+	flag.Parse()
 
 	resolver, err := mdns.NewResolver()
 	if err != nil {

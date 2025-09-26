@@ -1,11 +1,9 @@
 package mdns
 
 import (
-	"log"
 	"strings"
 )
 
-const debug = true
 
 func parseSubtypes(service string) (string, []string) {
 	subtypes := strings.Split(service, ",")
@@ -15,10 +13,4 @@ func parseSubtypes(service string) (string, []string) {
 // trimDot is used to trim the dots from the start or end of a string
 func trimDot(s string) string {
 	return strings.Trim(s, ".")
-}
-
-func debugLog(format string, args ...interface{}) {
-	if debug {
-		log.Printf("[DEBUG] "+format, args...)
-	}
 }

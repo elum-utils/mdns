@@ -11,12 +11,12 @@ import (
 )
 
 var (
-	name     = flag.String("name", "ProxyService", "Service instance name")
-	service  = flag.String("service", "_workstation._tcp", "Service type")
-	domain   = flag.String("domain", "local.", "Network domain")
-	host     = flag.String("host", "my-host", "Proxy hostname")
-	ip       = flag.String("ip", "192.168.1.50", "Proxy IP address")
-	port     = flag.Int("port", 42424, "Service port")    
+	name    = flag.String("name", "ProxyService", "Service instance name")
+	service = flag.String("service", "_workstation._tcp", "Service type")
+	domain  = flag.String("domain", "local.", "Network domain")
+	host    = flag.String("host", "my-host", "Proxy hostname")
+	ip      = flag.String("ip", "192.168.1.50", "Proxy IP address")
+	port    = flag.Int("port", 42424, "Service port")
 )
 
 func main() {
