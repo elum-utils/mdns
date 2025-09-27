@@ -80,7 +80,7 @@ func TestBasic(t *testing.T) {
 }
 
 func TestNoRegister(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resolver, err := NewResolver()
