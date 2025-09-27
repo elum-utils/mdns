@@ -32,7 +32,7 @@ func trimDot(s string) string {
 //
 // Supported escape sequences:
 //   - "\\"    -> backslash character
-//   - "\ "    -> space character  
+//   - "\ "    -> space character
 //   - "\."    -> dot character
 //   - "\DDD"  -> ASCII character (3-digit octal code)
 //
@@ -42,10 +42,10 @@ func dnsUnescape(s string) string {
 	if len(s) == 0 {
 		return s
 	}
-	
+
 	var b strings.Builder
 	b.Grow(len(s)) // Pre-allocate for efficiency
-	
+
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c == '\\' {

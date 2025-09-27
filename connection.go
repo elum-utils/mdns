@@ -15,7 +15,7 @@ var (
 	// mdnsGroupIPv4 is the IPv4 multicast group address for mDNS as defined
 	// by RFC 6762 (224.0.0.251).
 	mdnsGroupIPv4 = net.IPv4(224, 0, 0, 251)
-	
+
 	// mdnsGroupIPv6 is the IPv6 multicast group address for mDNS as defined
 	// by RFC 6762 (ff02::fb).
 	mdnsGroupIPv6 = net.ParseIP("ff02::fb")
@@ -27,7 +27,7 @@ var (
 		IP:   net.ParseIP("224.0.0.0"),
 		Port: 5353,
 	}
-	
+
 	// mdnsWildcardAddrIPv6 is the wildcard binding address for IPv6 mDNS
 	// sockets. Binding to this address allows reception of all multicast
 	// traffic on port 5353.
@@ -42,7 +42,7 @@ var (
 		IP:   mdnsGroupIPv4,
 		Port: 5353,
 	}
-	
+
 	// ipv6Addr is the destination address for sending IPv6 mDNS queries
 	// and announcements to the multicast group.
 	ipv6Addr = &net.UDPAddr{
@@ -83,7 +83,7 @@ func joinUdp6Multicast(interfaces []net.Interface) (*ipv6.PacketConn, error) {
 			failedJoins++
 		}
 	}
-	
+
 	// Fail if unable to join any interface
 	if failedJoins == len(interfaces) {
 		pkConn.Close()
@@ -125,7 +125,7 @@ func joinUdp4Multicast(interfaces []net.Interface) (*ipv4.PacketConn, error) {
 			failedJoins++
 		}
 	}
-	
+
 	// Fail if unable to join any interface
 	if failedJoins == len(interfaces) {
 		pkConn.Close()
@@ -149,7 +149,7 @@ func listMulticastInterfaces() []net.Interface {
 	if err != nil {
 		return nil
 	}
-	
+
 	// Filter interfaces: must be UP and support MULTICAST
 	for _, ifi := range ifaces {
 		if (ifi.Flags & net.FlagUp) == 0 {

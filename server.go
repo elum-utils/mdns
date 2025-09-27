@@ -198,13 +198,13 @@ func newServer(ifaces []net.Interface) (*Server, error) {
 	if err4 != nil {
 		log.Printf("[zeroconf] no suitable IPv4 interface: %s", err4.Error())
 	}
-	
+
 	// Initialize IPv6 multicast connection
 	ipv6conn, err6 := joinUdp6Multicast(ifaces)
 	if err6 != nil {
 		log.Printf("[zeroconf] no suitable IPv6 interface: %s", err6.Error())
 	}
-	
+
 	// Require at least one working connection
 	if err4 != nil && err6 != nil {
 		return nil, fmt.Errorf("no supported interface")
@@ -361,11 +361,11 @@ func (s *Server) handleQuery(query *dns.Msg, ifIndex int, from net.Addr) error {
 		resp.Question = nil // RFC6762: responses must not contain questions
 		resp.Answer = []dns.RR{}
 		resp.Extra = []dns.RR{}
-		
+
 		if err = s.handleQuestion(q, &resp, query, ifIndex); err != nil {
 			continue
 		}
-		
+
 		// Skip if no answer was generated
 		if len(resp.Answer) == 0 {
 			continue
@@ -671,7 +671,7 @@ func (s *Server) unregister() error {
 func (s *Server) appendAddrs(list []dns.RR, ttl uint32, ifIndex int, flushCache bool) []dns.RR {
 	v4 := s.service.AddrIPv4
 	v6 := s.service.AddrIPv6
-	
+
 	// If no addresses configured, use addresses from the specified interface
 	if len(v4) == 0 && len(v6) == 0 {
 		iface, _ := net.InterfaceByIndex(ifIndex)
@@ -681,17 +681,17 @@ func (s *Server) appendAddrs(list []dns.RR, ttl uint32, ifIndex int, flushCache 
 			v6 = append(v6, a6...)
 		}
 	}
-	
+
 	// Use recommended TTL for address records (RFC6762 section 10)
 	if ttl > 0 {
 		ttl = 120
 	}
-	
+
 	var cacheFlushBit uint16
 	if flushCache {
 		cacheFlushBit = qClassCacheFlush
 	}
-	
+
 	// Add IPv4 address records
 	for _, ipv4 := range v4 {
 		a := &dns.A{
@@ -705,7 +705,7 @@ func (s *Server) appendAddrs(list []dns.RR, ttl uint32, ifIndex int, flushCache 
 		}
 		list = append(list, a)
 	}
-	
+
 	// Add IPv6 address records
 	for _, ipv6 := range v6 {
 		aaaa := &dns.AAAA{
@@ -756,7 +756,7 @@ func (s *Server) unicastResponse(resp *dns.Msg, ifIndex int, from net.Addr) erro
 		return err
 	}
 	addr := from.(*net.UDPAddr)
-	
+
 	// Send via appropriate protocol (IPv4/IPv6)
 	if addr.IP.To4() != nil {
 		if ifIndex != 0 {
@@ -789,7 +789,7 @@ func (s *Server) multicastResponse(msg *dns.Msg, ifIndex int) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Send via IPv4 multicast
 	if s.ipv4conn != nil {
 		var wcm ipv4.ControlMessage

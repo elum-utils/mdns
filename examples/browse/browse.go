@@ -16,7 +16,6 @@ var (
 	domain  = flag.String("domain", "local.", "Search domain")
 )
 
-// joinIPs объединяет IPv4
 func joinIPs(se *mdns.ServiceEntry) string {
 	ips := []string{}
 	for _, ip := range se.AddrIPv4 {
@@ -28,7 +27,6 @@ func joinIPs(se *mdns.ServiceEntry) string {
 	return strings.Join(ips, " ")
 }
 
-// truncateString обрезает строку до максимальной длины и добавляет "..." если нужно
 func truncateString(str string, maxLen int) string {
 	if len(str) <= maxLen {
 		return str
@@ -51,13 +49,11 @@ func main() {
 			ar = "Rmv"
 		}
 		ipStr := joinIPs(se)
-		
-		// Ограничиваем длину полей для красивого вывода
+
 		domainStr := truncateString(se.Domain, 20)
 		serviceStr := truncateString(se.Service, 19)
 		instanceStr := truncateString(se.Instance, 22)
-		
-		// Форматируем с фиксированными ширинами
+
 		fmt.Printf("%s  %-4s  %4d   %2d  %-20s %-20s %-23s %s:%d\n",
 			ts, ar, se.Flags, se.IfIndex, domainStr, serviceStr, instanceStr, ipStr, se.Port)
 	})
@@ -65,8 +61,5 @@ func main() {
 		log.Fatal("Failed to lookup:", err)
 	}
 
-	// Бесконечный цикл вместо select{}
-	for {
-		time.Sleep(time.Hour)
-	}
+	select {}
 }

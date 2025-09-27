@@ -1,4 +1,4 @@
-// Package mdns defines the core data structures and interfaces for 
+// Package mdns defines the core data structures and interfaces for
 // multicast DNS service discovery, including service records, lookup
 // parameters, and discovery result handling.
 package mdns
@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-// ServiceHandler is a callback function type that processes discovered 
+// ServiceHandler is a callback function type that processes discovered
 // service entries. It is invoked for each service instance found during
 // browsing or lookup operations.
 //
@@ -17,8 +17,8 @@ import (
 // service information including network addresses, port, and metadata.
 type ServiceHandler func(*ServiceEntry)
 
-// ServiceRecord contains the fundamental description of a service for 
-// both registration and discovery purposes. It follows the DNS-SD 
+// ServiceRecord contains the fundamental description of a service for
+// both registration and discovery purposes. It follows the DNS-SD
 // naming conventions and structure.
 type ServiceRecord struct {
 	Instance string   `json:"name"`     // Instance name (e.g. "My Web Server")
@@ -32,7 +32,7 @@ type ServiceRecord struct {
 	serviceTypeName     string // DNS-SD service type enumeration name
 }
 
-// ServiceName returns the complete service name in the format 
+// ServiceName returns the complete service name in the format
 // required for DNS queries (e.g. "_http._tcp.local.").
 //
 // This is the name used for PTR record queries when browsing services.
@@ -61,12 +61,12 @@ func (s *ServiceRecord) ServiceTypeName() string {
 // NewServiceRecord constructs a new ServiceRecord with the given parameters
 // and precomputes the DNS names for efficient query processing.
 //
-// The service parameter may include subtypes using the format 
+// The service parameter may include subtypes using the format
 // "service,subtype1,subtype2" as per DNS-SD conventions.
 func NewServiceRecord(instance, service string, domain string) *ServiceRecord {
 	// Parse service type and any subtypes
 	service, subtypes := parseSubtypes(service)
-	
+
 	s := &ServiceRecord{
 		Instance:    instance,
 		Service:     service,
@@ -94,7 +94,7 @@ func NewServiceRecord(instance, service string, domain string) *ServiceRecord {
 	return s
 }
 
-// lookupParams contains all configurable properties needed to create 
+// lookupParams contains all configurable properties needed to create
 // and manage a service discovery request, including query parameters
 // and response handling configuration.
 type lookupParams struct {
@@ -106,18 +106,18 @@ type lookupParams struct {
 	// isBrowsing indicates whether this is a service browsing operation (true)
 	// or a specific service instance lookup (false)
 	isBrowsing bool
-	
+
 	// stopProbing channel signals when to stop sending periodic queries
 	stopProbing chan struct{}
-	
+
 	// once ensures probing is disabled only once
 	once sync.Once
 }
 
-// newLookupParams constructs a new lookupParams structure with the 
+// newLookupParams constructs a new lookupParams structure with the
 // specified service discovery parameters and handler configuration.
 //
-// The isBrowsing parameter determines the query strategy: browsing 
+// The isBrowsing parameter determines the query strategy: browsing
 // queries for PTR records while lookup queries for SRV/TXT records.
 func newLookupParams(instance, service, domain string, isBrowsing bool, handler ServiceHandler) *lookupParams {
 	p := &lookupParams{
@@ -125,7 +125,7 @@ func newLookupParams(instance, service, domain string, isBrowsing bool, handler 
 		handler:       handler,
 		isBrowsing:    isBrowsing,
 	}
-	
+
 	// Only create stop channel for lookup operations (not browsing)
 	if !isBrowsing {
 		p.stopProbing = make(chan struct{})
@@ -133,15 +133,15 @@ func newLookupParams(instance, service, domain string, isBrowsing bool, handler 
 	return p
 }
 
-// disableProbing signals that periodic querying should stop, typically 
+// disableProbing signals that periodic querying should stop, typically
 // called when a service instance has been successfully discovered.
 //
 // This method uses sync.Once to ensure the channel is closed only once,
 // preventing panics from multiple close attempts.
 func (l *lookupParams) disableProbing() {
-	l.once.Do(func() { 
+	l.once.Do(func() {
 		if l.stopProbing != nil {
-			close(l.stopProbing) 
+			close(l.stopProbing)
 		}
 	})
 }
@@ -153,25 +153,25 @@ func (l *lookupParams) disableProbing() {
 // both the service description and network connectivity information.
 type ServiceEntry struct {
 	ServiceRecord
-	
+
 	HostName string   `json:"hostname"` // Host machine's DNS name (FQDN)
 	Port     int      `json:"port"`     // Service port number
 	Text     []string `json:"text"`     // Service metadata from TXT records
 	TTL      uint32   `json:"ttl"`      // Time-to-live from DNS record
 	AddrIPv4 []net.IP `json:"-"`        // IPv4 addresses for the service
 	AddrIPv6 []net.IP `json:"-"`        // IPv6 addresses for the service
-	
-	// Event indicates whether this is an "Add" or "Rmv" event for 
+
+	// Event indicates whether this is an "Add" or "Rmv" event for
 	// service availability changes during browsing
-	Event   string `json:"event"`
-	
+	Event string `json:"event"`
+
 	// Flags bitmask indicating which DNS record types have been received
 	// for this service entry (PTR, SRV, TXT, A, AAAA)
-	Flags   uint32 `json:"flags"`
-	
+	Flags uint32 `json:"flags"`
+
 	// IfIndex specifies the network interface index where the service
 	// was discovered, useful for multi-homed systems
-	IfIndex int    `json:"ifindex"`
+	IfIndex int `json:"ifindex"`
 }
 
 // NewServiceEntry constructs a new ServiceEntry with the basic service
