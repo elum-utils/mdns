@@ -18,7 +18,7 @@ var (
 )
 
 func startMDNS(ctx context.Context, port int, name, service, domain string) {
-	server, err := Register(name, service, domain, port,
+	server, err := Register(ctx, name, service, domain, port,
 		[]string{"txtv=0", "lo=1", "la=2"}, nil)
 	if err != nil {
 		panic(fmt.Errorf("%v %v", err, "while registering mdns service"))

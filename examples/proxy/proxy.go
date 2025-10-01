@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -22,7 +23,10 @@ var (
 func main() {
 	flag.Parse()
 
-	server, err := mdns.RegisterProxy(*name, *service, *domain, *port, *host,
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	server, err := mdns.RegisterProxy(ctx, *name, *service, *domain, *port, *host,
 		[]string{*ip}, []string{"txtv=1", "proxy=true"}, nil)
 	if err != nil {
 		log.Fatal(err)

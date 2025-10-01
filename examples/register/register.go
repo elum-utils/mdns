@@ -1,11 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/elum-utils/mdns"
 )
@@ -20,22 +18,25 @@ var (
 func main() {
 	flag.Parse()
 
-	server, err := mdns.Register(*name, *service, *domain, *port, []string{"txtv=0", "lo=1", "la=2"}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	server, err := mdns.Register(ctx, *name, *service, *domain, *port, []string{"txtv=0", "lo=1", "la=2"}, nil)
 	if err != nil {
 		panic(err)
 	}
-	defer server.Shutdown()
+
 	log.Println("Published service:")
 	log.Println("- Name:", *name)
 	log.Println("- Type:", *service)
 	log.Println("- Domain:", *domain)
 	log.Println("- Port:", *port)
 
-	// Clean exit.
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-
-	<-sig
+	err = server.Start()
+	if err != nil {
+		println(err.Error())
+	}
 
 	log.Println("Shutting down.")
+
 }

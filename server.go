@@ -4,15 +4,18 @@
 package mdns
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/miekg/dns"
@@ -36,12 +39,11 @@ const (
 //
 // Returns an error if any required parameter is missing or if network
 // initialization fails.
-func Register(instance, service, domain string, port int, text []string, ifaces []net.Interface) (*Server, error) {
+func Register(ctx context.Context, instance, service, domain string, port int, text []string, ifaces []net.Interface) (*Server, error) {
 	entry := NewServiceEntry(instance, service, domain)
 	entry.Port = port
 	entry.Text = text
 
-	// Validate required parameters
 	if entry.Instance == "" {
 		return nil, fmt.Errorf("missing service instance name")
 	}
@@ -55,7 +57,6 @@ func Register(instance, service, domain string, port int, text []string, ifaces 
 		return nil, fmt.Errorf("missing port")
 	}
 
-	// Determine hostname if not provided
 	var err error
 	if entry.HostName == "" {
 		entry.HostName, err = os.Hostname()
@@ -64,17 +65,14 @@ func Register(instance, service, domain string, port int, text []string, ifaces 
 		}
 	}
 
-	// Ensure hostname is fully qualified in the service domain
 	if !strings.HasSuffix(trimDot(entry.HostName), entry.Domain) {
 		entry.HostName = fmt.Sprintf("%s.%s.", trimDot(entry.HostName), trimDot(entry.Domain))
 	}
 
-	// Use all multicast interfaces if none specified
 	if len(ifaces) == 0 {
 		ifaces = listMulticastInterfaces()
 	}
 
-	// Collect IP addresses from all specified interfaces
 	for _, iface := range ifaces {
 		v4, v6 := addrsForInterface(&iface)
 		entry.AddrIPv4 = append(entry.AddrIPv4, v4...)
@@ -85,15 +83,35 @@ func Register(instance, service, domain string, port int, text []string, ifaces 
 		return nil, fmt.Errorf("could not determine host IP addresses")
 	}
 
-	// Initialize server and start service announcement
-	s, err := newServer(ifaces)
-	if err != nil {
-		return nil, err
+	// Initialize IPv4 multicast connection
+	ipv4conn, err4 := joinUdp4Multicast(ifaces)
+	if err4 != nil {
+		log.Printf("[zeroconf] no suitable IPv4 interface: %s", err4.Error())
 	}
 
-	s.service = entry
-	go s.mainloop()
-	go s.probe()
+	// Initialize IPv6 multicast connection
+	ipv6conn, err6 := joinUdp6Multicast(ifaces)
+	if err6 != nil {
+		log.Printf("[zeroconf] no suitable IPv6 interface: %s", err6.Error())
+	}
+
+	// Require at least one working connection
+	if err4 != nil && err6 != nil {
+		return nil, fmt.Errorf("no supported interface")
+	}
+
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+
+	s := &Server{
+		ipv4conn:       ipv4conn,
+		ipv6conn:       ipv6conn,
+		ifaces:         ifaces,
+		ttl:            3200, // Default TTL for service records
+		service:        entry,
+		externalCtx:    ctx,
+		shutdownCtx:    shutdownCtx,
+		shutdownCancel: shutdownCancel,
+	}
 
 	return s, nil
 }
@@ -106,7 +124,7 @@ func Register(instance, service, domain string, port int, text []string, ifaces 
 //
 // Returns an error if any required parameter is invalid or if network
 // initialization fails.
-func RegisterProxy(instance, service, domain string, port int, host string, ips []string, text []string, ifaces []net.Interface) (*Server, error) {
+func RegisterProxy(ctx context.Context, instance, service, domain string, port int, host string, ips []string, text []string, ifaces []net.Interface) (*Server, error) {
 	entry := NewServiceEntry(instance, service, domain)
 	entry.Port = port
 	entry.Text = text
@@ -153,13 +171,36 @@ func RegisterProxy(instance, service, domain string, port int, host string, ips 
 		ifaces = listMulticastInterfaces()
 	}
 
-	// Initialize server and start service announcement
-	s, err := newServer(ifaces)
-	if err != nil {
-		return nil, err
+	// Initialize IPv4 multicast connection
+	ipv4conn, err4 := joinUdp4Multicast(ifaces)
+	if err4 != nil {
+		log.Printf("[zeroconf] no suitable IPv4 interface: %s", err4.Error())
 	}
 
-	s.service = entry
+	// Initialize IPv6 multicast connection
+	ipv6conn, err6 := joinUdp6Multicast(ifaces)
+	if err6 != nil {
+		log.Printf("[zeroconf] no suitable IPv6 interface: %s", err6.Error())
+	}
+
+	// Require at least one working connection
+	if err4 != nil && err6 != nil {
+		return nil, fmt.Errorf("no supported interface")
+	}
+
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+
+	s := &Server{
+		ipv4conn:       ipv4conn,
+		ipv6conn:       ipv6conn,
+		ifaces:         ifaces,
+		ttl:            3200, // Default TTL for service records
+		service:        entry,
+		externalCtx:    ctx,
+		shutdownCtx:    shutdownCtx,
+		shutdownCancel: shutdownCancel,
+	}
+
 	go s.mainloop()
 	go s.probe()
 
@@ -181,44 +222,13 @@ type Server struct {
 	ipv6conn *ipv6.PacketConn
 	ifaces   []net.Interface
 
-	shouldShutdown chan struct{}
+	externalCtx    context.Context    // Внешний контекст от пользователя
+	shutdownCtx    context.Context    // Объединенный контекст (внешний + внутренний)
+	shutdownCancel context.CancelFunc // Функция отмены объединенного контекста
 	shutdownLock   sync.Mutex
 	shutdownEnd    sync.WaitGroup
 	isShutdown     bool
 	ttl            uint32
-}
-
-// newServer initializes a new mDNS server with the specified network interfaces.
-// It creates and joins multicast groups for both IPv4 and IPv6 protocols.
-//
-// Returns an error if no supported network interfaces can be initialized.
-func newServer(ifaces []net.Interface) (*Server, error) {
-	// Initialize IPv4 multicast connection
-	ipv4conn, err4 := joinUdp4Multicast(ifaces)
-	if err4 != nil {
-		log.Printf("[zeroconf] no suitable IPv4 interface: %s", err4.Error())
-	}
-
-	// Initialize IPv6 multicast connection
-	ipv6conn, err6 := joinUdp6Multicast(ifaces)
-	if err6 != nil {
-		log.Printf("[zeroconf] no suitable IPv6 interface: %s", err6.Error())
-	}
-
-	// Require at least one working connection
-	if err4 != nil && err6 != nil {
-		return nil, fmt.Errorf("no supported interface")
-	}
-
-	s := &Server{
-		ipv4conn:       ipv4conn,
-		ipv6conn:       ipv6conn,
-		ifaces:         ifaces,
-		ttl:            3200, // Default TTL for service records
-		shouldShutdown: make(chan struct{}),
-	}
-
-	return s, nil
 }
 
 // mainloop starts the packet reception goroutines for IPv4 and IPv6 connections.
@@ -261,14 +271,12 @@ func (s *Server) shutdown() error {
 	if s.isShutdown {
 		return errors.New("server is already shutdown")
 	}
+	s.isShutdown = true
 
-	// Send unregistration announcement
+	// Отправляем unregister-уведомление
 	err := s.unregister()
 
-	// Signal shutdown to all goroutines
-	close(s.shouldShutdown)
-
-	// Close network connections
+	// Закрываем соединения
 	if s.ipv4conn != nil {
 		s.ipv4conn.Close()
 	}
@@ -276,9 +284,7 @@ func (s *Server) shutdown() error {
 		s.ipv6conn.Close()
 	}
 
-	// Wait for all goroutines to complete
 	s.shutdownEnd.Wait()
-	s.isShutdown = true
 
 	return err
 }
@@ -294,7 +300,9 @@ func (s *Server) recv4(c *ipv4.PacketConn) {
 	defer s.shutdownEnd.Done()
 	for {
 		select {
-		case <-s.shouldShutdown:
+		case <-s.externalCtx.Done():
+			return
+		case <-s.shutdownCtx.Done():
 			return
 		default:
 			var ifIndex int
@@ -321,7 +329,9 @@ func (s *Server) recv6(c *ipv6.PacketConn) {
 	defer s.shutdownEnd.Done()
 	for {
 		select {
-		case <-s.shouldShutdown:
+		case <-s.externalCtx.Done():
+			return
+		case <-s.shutdownCtx.Done():
 			return
 		default:
 			var ifIndex int
@@ -609,7 +619,7 @@ func (s *Server) probe() {
 
 	// Send probe packets with random delays
 	randomizer := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < multicastRepetitions; i++ {
+	for range multicastRepetitions {
 		if err := s.multicastResponse(q, 0); err != nil {
 			log.Println("[ERR] zeroconf: failed to send probe:", err.Error())
 		}
@@ -618,7 +628,7 @@ func (s *Server) probe() {
 
 	// Send service announcements with exponential backoff
 	timeout := 1 * time.Second
-	for i := 0; i < multicastRepetitions; i++ {
+	for range multicastRepetitions {
 		for _, intf := range s.ifaces {
 			resp := new(dns.Msg)
 			resp.MsgHdr.Response = true
@@ -852,6 +862,25 @@ func (s *Server) multicastResponse(msg *dns.Msg, ifIndex int) error {
 		}
 	}
 	return nil
+}
+
+func (s *Server) Start() error {
+
+	go s.mainloop()
+	go s.probe()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-sigChan:
+		s.shutdownCancel()
+		return s.shutdown()
+	case <-s.externalCtx.Done():
+		s.shutdownCancel()
+		return s.shutdown()
+	}
+
 }
 
 // isUnicastQuestion checks if a DNS question has the unicast response bit set
