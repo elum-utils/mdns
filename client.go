@@ -264,7 +264,7 @@ func (c *client) mainloop(ctx context.Context, params *lookupParams) {
 
 					key := rr.Ptr
 					if _, ok := entries[key]; !ok {
-						instance := trimDot(strings.ReplaceAll(rr.Ptr, rr.Hdr.Name, "", ))
+						instance := trimDot(strings.ReplaceAll(rr.Ptr, rr.Hdr.Name, ""))
 						instance = dnsUnescape(instance)
 						entries[key] = NewServiceEntry(instance, params.Service, params.Domain)
 					}
