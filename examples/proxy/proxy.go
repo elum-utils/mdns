@@ -4,9 +4,6 @@ import (
 	"context"
 	"flag"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/elum-utils/mdns"
 )
@@ -31,14 +28,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer server.Shutdown()
 
 	log.Printf("Published proxy service %s on %s:%d\n", *name, *ip, *port)
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-
-	<-sig
+	err = server.Start()
+	if err != nil {
+		println(err.Error())
+	}
 
 	log.Println("Shutting down.")
 }

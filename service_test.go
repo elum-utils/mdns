@@ -23,10 +23,12 @@ func startMDNS(ctx context.Context, port int, name, service, domain string) {
 	if err != nil {
 		panic(fmt.Errorf("%v %v", err, "while registering mdns service"))
 	}
-	defer server.Shutdown()
 	log.Printf("Published service: %s, type: %s, domain: %s", name, service, domain)
 
-	<-ctx.Done()
+	err = server.Start()
+	if err != nil {
+		panic(fmt.Errorf("%v %v", err, "while registering mdns service"))
+	}
 	log.Printf("Shutting down.")
 }
 

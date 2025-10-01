@@ -242,12 +242,6 @@ func (s *Server) mainloop() {
 	}
 }
 
-// Shutdown gracefully stops the server, unregisters the service, and closes
-// all network connections. It waits for all goroutines to complete.
-func (s *Server) Shutdown() {
-	s.shutdown()
-}
-
 // SetText updates the service's TXT records and announces the changes to
 // the network. This can be used to update service metadata at runtime.
 func (s *Server) SetText(text []string) {
